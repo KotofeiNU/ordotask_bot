@@ -13,7 +13,7 @@ from telegram.ext import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-TOKEN = "8625275808:AAF3vPZ6xlVrDSWT2r0vdkdIrl5K-nzEDuk"
+TOKEN = os.environ.get("BOT_TOKEN")
 TZ = ZoneInfo("Asia/Tashkent")
 DATA_FILE = "/home/claude/ordo_data.json"
 
