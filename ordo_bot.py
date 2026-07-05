@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """ORDO Tasks & Reports Bot — Tashkent UTC+5"""
 
-import json, os, logging, asyncio
+import json, os, logging, asyncio, threading
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 TOKEN = os.environ.get("BOT_TOKEN")
 TZ = ZoneInfo("Asia/Tashkent")
-DATA_FILE = "/home/claude/ordo_data.json"
+DATA_FILE = os.path.join(os.path.dirname(__file__), "ordo_data.json")
 
 (TASK_TITLE, TASK_ASSIGNEE, TASK_DEADLINE, TASK_PRIORITY, TASK_REPEAT,
  REPORT_TYPE, REPORT_FILL, DONE_COMMENT) = range(8)
@@ -38,6 +39,21 @@ def save(d):
     with open(DATA_FILE,"w") as f: json.dump(d,f,ensure_ascii=False,indent=2)
 
 def now_tz(): return datetime.now(TZ)
+
+# ── HTTP сервер для Render ────────────────────────────────────────────────────
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+    def log_message(self, format, *args): pass
+
+def start_http_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    logger.info(f"HTTP health server started on port {port}")
 
 # ── /start ────────────────────────────────────────────────────────────────────
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -241,7 +257,6 @@ async def _send_weekly(bot, chat_id):
                 try: nums[k] = nums.get(k,0)+float(v.replace(",",".").replace(" ",""))
                 except: pass
         for k,v in nums.items(): msg += f"  • {k}: {v:,.0f}\n"
-        # Conversions
         if key=="mp_l1l2" and nums.get("Новые лиды",0)>0:
             msg += f"  📈 Конверсия: {round(nums.get('Оплаты',0)/nums['Новые лиды']*100,1)}%\n"
         if key=="mp_franchise" and nums.get("Новые лиды",0)>0:
@@ -280,7 +295,6 @@ async def _fines_1801(bot):
             f = {"username":uname,"type":"отчёт","amount":10000,"date":now.isoformat(),
                  "desc":f"Не сдал {REPORT_TEMPLATES[rt]['name']} до 18:00"}
             d["fines"].append(f); new_fines.append(f)
-        # Task fines for tasks past deadline NOT done
         overdue_tasks = [t for t in d["tasks"] if uname in t.get("assignee","") and t["status"]=="active"
                          and datetime.fromisoformat(t["deadline"])<now]
         for t in overdue_tasks:
@@ -353,6 +367,8 @@ async def cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Отменено."); return ConversationHandler.END
 
 def main():
+    start_http_server()
+
     app = Application.builder().token(TOKEN).build()
 
     task_conv = ConversationHandler(
