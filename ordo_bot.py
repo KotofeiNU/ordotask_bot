@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 TOKEN = os.environ.get("BOT_TOKEN")
 TZ = ZoneInfo("Asia/Tashkent")
-DATA_FILE = os.path.join(os.path.dirname(__file__), "ordo_data.json")
+DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ordo_data.json")
 
 (TASK_TITLE, TASK_ASSIGNEE, TASK_DEADLINE, TASK_PRIORITY, TASK_REPEAT,
  REPORT_TYPE, REPORT_FILL, DONE_COMMENT) = range(8)
@@ -40,7 +40,6 @@ def save(d):
 
 def now_tz(): return datetime.now(TZ)
 
-# ── HTTP сервер для Render ────────────────────────────────────────────────────
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -55,7 +54,6 @@ def start_http_server():
     thread.start()
     logger.info(f"HTTP health server started on port {port}")
 
-# ── /start ────────────────────────────────────────────────────────────────────
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     d = load()
     u = update.effective_user
@@ -71,7 +69,6 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/fines — штрафы\n/report_week — аналитика за неделю"
     )
 
-# ── /newtask ──────────────────────────────────────────────────────────────────
 async def new_task(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📝 Название задачи:")
     return TASK_TITLE
@@ -126,7 +123,6 @@ async def task_repeat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             except: pass
     return ConversationHandler.END
 
-# ── /done_N ───────────────────────────────────────────────────────────────────
 async def done_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     tid = int(update.message.text.replace("/done_",""))
     ctx.user_data["done_id"] = tid
@@ -151,7 +147,6 @@ async def done_comment(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             break
     save(d); return ConversationHandler.END
 
-# ── Views ─────────────────────────────────────────────────────────────────────
 async def my_tasks(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     d = load(); u = update.effective_user.username or str(update.effective_user.id)
     tasks = [t for t in d["tasks"] if u in t["assignee"] and t["status"]=="active"]
@@ -175,7 +170,6 @@ async def overdue(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for t in tasks: msg += f"#{t['id']} {t['title']}\n👤 @{t['assignee']} | 📅 {t['deadline_fmt']}\n\n"
     await update.message.reply_text(msg)
 
-# ── /report ───────────────────────────────────────────────────────────────────
 async def report_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = [[InlineKeyboardButton(v["name"], callback_data=f"rep_{k}")] for k,v in REPORT_TEMPLATES.items()]
     await update.message.reply_text("📊 Выбери тип отчёта:", reply_markup=InlineKeyboardMarkup(kb))
@@ -205,7 +199,6 @@ async def report_fill(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg)
     return ConversationHandler.END
 
-# ── /stats ────────────────────────────────────────────────────────────────────
 async def stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     d = load(); now = now_tz()
     us = {}
@@ -239,7 +232,6 @@ async def fines_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for u,a in total.items(): msg += f"@{u}: {a:,}тг\n"
     await update.message.reply_text(msg)
 
-# ── Weekly report ─────────────────────────────────────────────────────────────
 async def report_week(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await _send_weekly(ctx.bot, update.effective_chat.id)
 
@@ -266,7 +258,6 @@ async def _send_weekly(bot, chat_id):
         msg += "\n"
     await bot.send_message(chat_id, msg)
 
-# ── Scheduled ─────────────────────────────────────────────────────────────────
 async def _reminder_1750(bot):
     d = load(); now = now_tz(); today = now.strftime("%d.%m.%Y")
     for uname, uid in d["members"].items():
